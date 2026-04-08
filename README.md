@@ -8,7 +8,7 @@ Entry point script for [M365-QuickAssess](https://www.powershellgallery.com/pack
 
 ### Step 1 — Download the launcher
 
-**[⬇ Download Launch-M365Assessment.ps1](https://raw.githubusercontent.com/HennepinCrawler/M365-QuickAssess-Launcher/main/Launch-M365Assessment.ps1)**
+**[⬇ Download Launch-M365Assessment.ps1](https://github.com/HennepinCrawler/M365-QuickAssess-Launcher/blob/main/Launch-M365Assessment.ps1)**
 
 Save it to your Desktop.
 
