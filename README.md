@@ -2,6 +2,10 @@
 
 Entry point script for [M365-QuickAssess](https://www.powershellgallery.com/packages/M365-QuickAssess) — a read-only Microsoft 365 tenant assessment tool built by [Rackspace Technology](https://www.rackspace.com).
 
+What happens with your results?
+Rackspace Technology specializes in Active Directory migrations and managed services for the Microsoft 365 ecosystem -- including tenant-to-tenant migrations, Entra ID, Exchange Online, Teams, and more.
+Send us your JSON report and someone will reach out to walk you through the findings and discuss how we can help. 
+
 Ryan Holderread is a Delivery Architect at Rackspace Technology with 30 years of experience working across Microsoft platforms. A seasoned expert in Microsoft 365 architecture, tenant-to-tenant migrations, and cloud modernization, Ryan has spent three decades helping organizations navigate the ever-evolving Microsoft ecosystem — from on-premises infrastructure to the modern M365 cloud. At Rackspace, he leads technical delivery efforts and builds the tools and frameworks that empower sales and solutions teams to scope and execute complex M365 engagements. For professional inquiries, reach Ryan at ryan.holderread@rackspace.com
 
 ---
