@@ -18,7 +18,8 @@ $GraphVersion = "2.26.1"
 if ( -not ( [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent() ).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator ) )
 {
-    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs -WindowStyle Hidden
+    $elevShell = if ( Get-Command pwsh -ErrorAction SilentlyContinue ) { 'pwsh' } else { 'powershell' }
+    Start-Process $elevShell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
     exit
 }
 
@@ -45,7 +46,7 @@ if ( $PSVersionTable.PSVersion.Major -lt 7 )
         winget install --id Microsoft.PowerShell --source winget --silent --accept-package-agreements --accept-source-agreements
         Write-Host " PowerShell 7 installed. Relaunching..." -ForegroundColor Green
         Start-Sleep 5
-        Start-Process pwsh -ArgumentList "-NoProfile -ExecutionPolicy Unrestricted -File `"$PSCommandPath`"" -Verb RunAs
+        Start-Process pwsh -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
         exit
     }
     else
@@ -61,7 +62,7 @@ if ( $PSVersionTable.PSVersion.Major -lt 7 )
 # Strip OneDrive and user-profile module paths to avoid false negatives
 # -------------------------------------------------------------------
 $programFilesModules = "C:\Program Files\PowerShell\Modules"
-$env:PSModulePath    = ( $env:PSModulePath -split ";" | Where-Object { $_ -eq $programFilesModules -or $_ -like "C:\Program Files*" -or $_ -like "C:\Windows*"} ) -join ";"
+$env:PSModulePath    = ( $env:PSModulePath -split ";" | Where-Object { $_ -like "C:\Program Files*" -or $_ -like "C:\Windows*" } ) -join ";"
 
 if ( $env:PSModulePath -notlike "*$programFilesModules*" )
 {
@@ -129,11 +130,14 @@ if ( -not $setupAlreadyRan )
             Uninstall-Module $_.Name -RequiredVersion $_.Version -Force -ErrorAction SilentlyContinue
         }
 
+    $allAvailableModules = Get-Module -ListAvailable
+
     foreach ( $m in $graphModules )
     {
-        $existing = Get-Module $m -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
+        $allVersions = @( $allAvailableModules | Where-Object { $_.Name -eq $m } )
+        $existing    = $allVersions | Sort-Object Version -Descending | Select-Object -First 1
 
-        if ( -not ( Get-Module $m -ListAvailable | Where-Object {
+        if ( -not ( $allVersions | Where-Object {
             $_.ModuleBase -like "C:\Program Files\PowerShell\Modules*" -and
             $_.Version -eq $GraphVersion
         } ) )
@@ -154,9 +158,9 @@ if ( -not $setupAlreadyRan )
 
     foreach ( $m in $otherModules )
     {
-        $existing = Get-Module $m -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
-
-        $installedInPS7 = Get-Module $m -ListAvailable | Where-Object {
+        $allVersions    = @( $allAvailableModules | Where-Object { $_.Name -eq $m } )
+        $existing       = $allVersions | Sort-Object Version -Descending | Select-Object -First 1
+        $installedInPS7 = $allVersions | Where-Object {
             $_.ModuleBase -like "C:\Program Files\PowerShell\Modules*"
         } | Select-Object -First 1
 
@@ -179,9 +183,38 @@ if ( -not $setupAlreadyRan )
     # -------------------------------------------------------------------
     # EXO - pinned to 3.8.0
     # -------------------------------------------------------------------
-    $exo = Get-Module ExchangeOnlineManagement -ListAvailable | Where-Object { $_.Version -eq '3.8.0' }
+    $exoAll     = @( $allAvailableModules | Where-Object { $_.Name -eq 'ExchangeOnlineManagement' } )
+    $exo        = $exoAll | Where-Object { $_.Version -eq '3.8.0' }
+    $exoNewer   = $exoAll | Where-Object { $_.Version -gt [Version]'3.8.0' } | Sort-Object Version -Descending | Select-Object -First 1
 
-    if ( -not $exo )
+    if ( $exoNewer )
+    {
+        Write-Host ""
+        Write-Host " WARNING: ExchangeOnlineManagement $( $exoNewer.Version ) is installed." -ForegroundColor Yellow
+        Write-Host " This tool requires 3.8.0. Versions above 3.8.x may cause compatibility issues." -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "   [C] Continue anyway (results may be unreliable)" -ForegroundColor DarkYellow
+        Write-Host "   [Q] Quit -- fix manually, then re-run" -ForegroundColor DarkYellow
+        Write-Host ""
+        $exoChoice = Read-Host " Enter choice (C/Q)"
+
+        if ( $exoChoice -notmatch '^[Cc]$' )
+        {
+            Write-Host ""
+            Write-Host " To fix, run the following in an elevated PowerShell 7 session:" -ForegroundColor Cyan
+            Write-Host "   Uninstall-Module ExchangeOnlineManagement -AllVersions -Force" -ForegroundColor White
+            Write-Host "   Install-Module ExchangeOnlineManagement -RequiredVersion 3.8.0 -Scope AllUsers -Force" -ForegroundColor White
+            Write-Host ""
+            Read-Host " Press Enter to exit"
+            exit 1
+        }
+
+        Write-Host ""
+        Write-Host " Continuing with ExchangeOnlineManagement $( $exoNewer.Version ) -- proceed with caution." -ForegroundColor DarkYellow
+        Write-Host ""
+    }
+
+    elseif ( -not $exo )
     {
         Write-Host " Installing ExchangeOnlineManagement 3.8.0..." -ForegroundColor Yellow
         Get-Module ExchangeOnlineManagement -ListAvailable | ForEach-Object {
@@ -194,8 +227,8 @@ if ( -not $setupAlreadyRan )
     # -------------------------------------------------------------------
     # Install M365-QuickAssess
     # -------------------------------------------------------------------
-    if ( -not ( Get-Module M365-QuickAssess -ListAvailable | Where-Object {
-        $_.ModuleBase -like "C:\Program Files\PowerShell\Modules*"
+    if ( -not ( $allAvailableModules | Where-Object {
+        $_.Name -eq 'M365-QuickAssess' -and $_.ModuleBase -like "C:\Program Files\PowerShell\Modules*"
     } ) )
     {
         Write-Host " Installing M365-QuickAssess -- not found in C:\Program Files\PowerShell\Modules, installing..." -ForegroundColor Yellow
@@ -260,9 +293,10 @@ foreach ( $m in $graphModules )
 }
 
 Write-Host "   ExchangeOnlineManagement 3.8.0" -ForegroundColor DarkGray
-Write-Host "   Microsoft.Online.SharePoint.PowerShell" -ForegroundColor DarkGray
-Write-Host "   Az.Accounts" -ForegroundColor DarkGray
-Write-Host "   Az.Resources" -ForegroundColor DarkGray
+foreach ( $m in $otherModules )
+{
+    Write-Host "   $m" -ForegroundColor DarkGray
+}
 Write-Host "   M365-QuickAssess" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host " To manually remove any of these modules run:" -ForegroundColor White
@@ -274,13 +308,13 @@ foreach ( $m in $graphModules )
 }
 
 Write-Host "   Uninstall-Module ExchangeOnlineManagement -RequiredVersion 3.8.0 -Force" -ForegroundColor Cyan
-Write-Host "   Uninstall-Module Microsoft.Online.SharePoint.PowerShell -Force" -ForegroundColor Cyan
-Write-Host "   Uninstall-Module Az.Accounts -Force" -ForegroundColor Cyan
-Write-Host "   Uninstall-Module Az.Resources -Force" -ForegroundColor Cyan
+foreach ( $m in $otherModules )
+{
+    Write-Host "   Uninstall-Module $m -Force" -ForegroundColor Cyan
+}
 Write-Host "   Uninstall-Module M365-QuickAssess -Force" -ForegroundColor Cyan
 Write-Host ""
 Write-Host " Note: Having multiple versions of the same Graph modules across different" -ForegroundColor Yellow
 Write-Host " scopes can cause assembly conflicts in new PowerShell sessions." -ForegroundColor Yellow
 Write-Host ""
 Read-Host " Press Enter to exit"
-PAUSE
